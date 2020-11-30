@@ -1,0 +1,8 @@
+{
+  "name": "cloud-projetofinal",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/guidiamond/cloud-projetofinal.git",
+  "author": "guidiamond <guilherme.batista770@gmail.com>",
+  "license": "MIT"
+}
