@@ -224,6 +224,7 @@ def create_ami(obj):
         print("AMI created")
 
         obj["ami"]["id"] = response["ImageId"]
+        print(response["ImageId"])
 
         return True
 
@@ -307,6 +308,54 @@ def create_load_balancer(obj, subnets, security_group_id):
         print("Error", e)
 
 
+autoscale_client = boto3.client("autoscaling", region_name=oregon_region)
+autoscale = {"name": "autoscale", "client": autoscale_client}
+
+
+def create_launch_cfg(obj, client_img_id, security_group_id):
+    print("\ncreating launch cfg")
+    try:
+        response = autoscale_client.create_launch_configuration(
+            LaunchConfigurationName=obj["name"],
+            ImageId=client_img_id,
+            KeyName="oregon-key",
+            SecurityGroups=[security_group_id],
+            InstanceType="t2.micro",
+            InstanceMonitoring={"Enabled": True},
+        )
+
+        print("launch_configuration created")
+
+    except ClientError as e:
+        print("Error", e)
+
+
+def create_autoscaling(groupname, obj, load_balencer_name, availability_zones):
+    print("\nCreating autoscaling")
+    try:
+        response = obj["client"].create_auto_scaling_group(
+            AutoScalingGroupName=groupname,
+            LaunchConfigurationName=obj["name"],
+            MinSize=2,
+            MaxSize=3,
+            LoadBalancerNames=[load_balencer_name],
+            DesiredCapacity=2,
+            AvailabilityZones=availability_zones,
+        )
+
+        while not len(
+            autoscale["client"].describe_auto_scaling_groups(
+                AutoScalingGroupNames=[groupname]
+            )["AutoScalingGroups"]
+        ):
+            get_timer(10)
+
+            print("autoscaling created")
+
+    except ClientError as e:
+        print("Error", e)
+
+
 def main():
     # ohio
     create_security_group(ohio)  # assign ohio's security_group id
@@ -318,15 +367,41 @@ def main():
     create_instance(oregon)  # assign oregon's instance ip and id
 
     # get subnets used for the load balencer
+    availability_zones = [
+        zone["ZoneName"]
+        for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
+    ]
     subnets = [
         subnet["SubnetId"] for subnet in oregon["client"].describe_subnets()["Subnets"]
+    ]
+    # get availability_zones for autoscaling
+    availability_zones = [
+        zone["ZoneName"]
+        for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
     ]
 
     # Create AMI and delete oregon instance
     create_ami(oregon)
     delete_instances(oregon)
 
+    # Create load balencer
     create_load_balancer(elb, subnets, oregon["security_group"]["id"])
+
+    # create autoscaling
+    launch_cfg_name = "autoscalingcfg"
+    print(oregon)
+    create_launch_cfg(
+        obj=autoscale,
+        client_img_id=oregon["ami"]["id"],
+        security_group_id=oregon["security_group"]["id"],
+    )
+    autoscale_group_name = "oregon_group_guilhermetb1"
+    create_autoscaling(
+        groupname=autoscale_group_name,
+        obj=autoscale,
+        load_balencer_name=elb["name"],
+        availability_zones=availability_zones,
+    )
 
 
 main()
