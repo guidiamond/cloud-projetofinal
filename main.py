@@ -196,6 +196,57 @@ def create_ami(obj):
         return False
 
 
+def delete_instances(obj):
+    print("\nDeleting Instances")
+    try:
+        instance_id = obj["client"].describe_instances(
+            Filters=[
+                {
+                    "Name": "tag:%s" % (obj["instance"]["tag"]["Key"]),
+                    "Values": [obj["instance"]["tag"]["Value"]],
+                },
+                {"Name": "instance-state-name", "Values": ["running"]},
+            ]
+        )
+
+        if len(instance_id["Reservations"]):
+            instance_id = instance_id["Reservations"][0]["Instances"][0]["InstanceId"]
+            waiter = obj["client"].get_waiter("instance_terminated")
+            response = obj["client"].terminate_instances(InstanceIds=[instance_id])
+            waiter.wait(InstanceIds=[instance_id])
+            print("Instance %s Deleted" % (instance_id))
+            obj["instance"]["id"] = None
+            return True
+
+        return False
+
+    except ClientError as e:
+        print("Error", e)
+        return False
+
+     def create_load_balancer_v2(self, name, security_group, tag):
+          print("\nCreating load_balancer name=%s" % (name))
+          try:
+               waiter = self.elvb2_client.get_waiter('load_balancer_available')
+               load_balancer_arn = self.elvb2_client.create_load_balancer(
+                    Name=name,
+                    Subnets=self.subnets,
+                    Tags=[tag],
+                    Type='classic',
+               )['LoadBalancers'][0]['LoadBalancerArn']
+
+               waiter.wait(LoadBalancerArns=[load_balancer_arn])
+               response = self.elvb2_client.create_listener(
+                    DefaultActions=[{'TargetGroupArn': tg_arn, 'Type': 'forward'}],
+                    LoadBalancerArn=load_balancer_arn,
+                    Port=80,
+                    Protocol='HTTP',
+               )
+               print("load_balancer arn=%s created" % (load_balancer_arn))
+
+          except ClientError as e:
+               print('Error', e)
+
 def main():
     # ohio
     create_security_group(ohio)  # assign ohio's security_group id
@@ -206,7 +257,9 @@ def main():
     create_security_group(oregon)  # assign oregon's security_group id
     create_instance(oregon)  # assign oregon's instance ip and id
 
+    # Create AMI and delete oregon instance
     create_ami(oregon)
+    delete_instances(oregon)
 
 
 main()
