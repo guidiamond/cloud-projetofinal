@@ -128,7 +128,7 @@ elb = {
 def get_django_script(psql_ip):
     return """#!/bin/bash
      sudo apt update
-     git clone https://github.com/Gustavobb/tasks.git && mv tasks /home/ubuntu
+     git clone https://github.com/guidiamond/tasks.git && mv tasks /home/ubuntu
      sudo sed -i 's/node1/{}/' /home/ubuntu/tasks/portfolio/settings.py 
      /home/ubuntu/tasks/./install.sh
      echo $? >> /home/ubuntu/aa.txt
@@ -308,8 +308,45 @@ def create_load_balancer(obj, subnets, security_group_id):
         print("Error", e)
 
 
+def delete_load_balancer(obj):
+    print("\nDeleting load balencer")
+    try:
+        load_balancers = obj["client"].describe_load_balancers()[
+            "LoadBalancerDescriptions"
+        ]
+        exists = False
+
+        for lb in load_balancers:
+            if lb["LoadBalancerName"] == obj["name"]:
+                exists = True
+
+        if exists:
+            response = obj["client"].delete_load_balancer(LoadBalancerName=obj["name"])
+            ok = True
+            while ok:
+                lb = obj["client"].describe_load_balancers()["LoadBalancerDescriptions"]
+                ok = True
+                if not len(lb):
+                    ok = False
+                for l in lb:
+                    print(l["LoadBalancerName"])
+                    if l["LoadBalancerName"] == obj["name"]:
+                        ok = False
+
+                get_timer(10)
+
+            print("load_balancer deleted")
+
+    except ClientError as e:
+        print("Error", e)
+
+
 autoscale_client = boto3.client("autoscaling", region_name=oregon_region)
-autoscale = {"name": "autoscale", "client": autoscale_client}
+autoscale = {
+    "name": "autoscale",
+    "groupname": "oregon_group_guilhermetb1",
+    "client": autoscale_client,
+}
 
 
 def create_launch_cfg(obj, client_img_id, security_group_id):
@@ -330,11 +367,11 @@ def create_launch_cfg(obj, client_img_id, security_group_id):
         print("Error", e)
 
 
-def create_autoscaling(groupname, obj, load_balencer_name, availability_zones):
+def create_autoscaling(obj, load_balencer_name, availability_zones):
     print("\nCreating autoscaling")
     try:
         response = obj["client"].create_auto_scaling_group(
-            AutoScalingGroupName=groupname,
+            AutoScalingGroupName=obj["groupname"],
             LaunchConfigurationName=obj["name"],
             MinSize=2,
             MaxSize=3,
@@ -345,7 +382,7 @@ def create_autoscaling(groupname, obj, load_balencer_name, availability_zones):
 
         while not len(
             autoscale["client"].describe_auto_scaling_groups(
-                AutoScalingGroupNames=[groupname]
+                AutoScalingGroupNames=[obj["groupname"]]
             )["AutoScalingGroups"]
         ):
             get_timer(10)
@@ -356,52 +393,78 @@ def create_autoscaling(groupname, obj, load_balencer_name, availability_zones):
         print("Error", e)
 
 
+def delete_autoscaling(obj):
+    print("\nDeleting autoscaling")
+    try:
+        if len(
+            obj["client"].describe_auto_scaling_groups(
+                AutoScalingGroupNames=[obj["groupname"]]
+            )["AutoScalingGroups"]
+        ):
+            response = obj["client"].delete_auto_scaling_group(
+                AutoScalingGroupName=obj["groupname"], ForceDelete=True
+            )
+
+            while len(
+                obj["client"].describe_auto_scaling_groups(
+                    AutoScalingGroupNames=[obj["groupname"]]
+                )["AutoScalingGroups"]
+            ):
+                get_timer(10)
+
+            print("autoscaling deleted")
+
+    except ClientError as e:
+        print("Error", e)
+
+
 def main():
+    # Deletion order : autoscale
+    delete_autoscaling(autoscale)
+    delete_load_balancer(elb)
+
     # ohio
-    create_security_group(ohio)  # assign ohio's security_group id
-    create_instance(ohio)  # assign ohio's instance ip and id
-
-    # wait for ohio's instance public ip to be assigned before assigning oregon['script']
-    oregon["script"] = get_django_script(ohio["instance"]["ip"])
-    create_security_group(oregon)  # assign oregon's security_group id
-    create_instance(oregon)  # assign oregon's instance ip and id
-
-    # get subnets used for the load balencer
-    availability_zones = [
-        zone["ZoneName"]
-        for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
-    ]
-    subnets = [
-        subnet["SubnetId"] for subnet in oregon["client"].describe_subnets()["Subnets"]
-    ]
-    # get availability_zones for autoscaling
-    availability_zones = [
-        zone["ZoneName"]
-        for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
-    ]
-
-    # Create AMI and delete oregon instance
-    create_ami(oregon)
-    delete_instances(oregon)
-
-    # Create load balencer
-    create_load_balancer(elb, subnets, oregon["security_group"]["id"])
-
-    # create autoscaling
-    launch_cfg_name = "autoscalingcfg"
-    print(oregon)
-    create_launch_cfg(
-        obj=autoscale,
-        client_img_id=oregon["ami"]["id"],
-        security_group_id=oregon["security_group"]["id"],
-    )
-    autoscale_group_name = "oregon_group_guilhermetb1"
-    create_autoscaling(
-        groupname=autoscale_group_name,
-        obj=autoscale,
-        load_balencer_name=elb["name"],
-        availability_zones=availability_zones,
-    )
+    # create_security_group(ohio)  # assign ohio's security_group id
+    # create_instance(ohio)  # assign ohio's instance ip and id
+    #
+    # # wait for ohio's instance public ip to be assigned before assigning oregon['script']
+    # oregon["script"] = get_django_script(ohio["instance"]["ip"])
+    # create_security_group(oregon)  # assign oregon's security_group id
+    # create_instance(oregon)  # assign oregon's instance ip and id
+    #
+    # # get subnets used for the load balencer
+    # availability_zones = [
+    #     zone["ZoneName"]
+    #     for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
+    # ]
+    # subnets = [
+    #     subnet["SubnetId"] for subnet in oregon["client"].describe_subnets()["Subnets"]
+    # ]
+    # # get availability_zones for autoscaling
+    # availability_zones = [
+    #     zone["ZoneName"]
+    #     for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
+    # ]
+    #
+    # # Create AMI and delete oregon instance
+    # create_ami(oregon)
+    # delete_instances(oregon)
+    #
+    # # Create load balencer
+    # create_load_balancer(elb, subnets, oregon["security_group"]["id"])
+    #
+    # # create autoscaling
+    # launch_cfg_name = "autoscalingcfg"
+    # create_launch_cfg(
+    #     obj=autoscale,
+    #     client_img_id=oregon["ami"]["id"],
+    #     security_group_id=oregon["security_group"]["id"],
+    # )
+    # create_autoscaling(
+    #     obj=autoscale,
+    #     load_balencer_name=elb["name"],
+    #     availability_zones=availability_zones,
+    # )
 
 
 main()
