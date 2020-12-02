@@ -367,6 +367,23 @@ def create_launch_cfg(obj, client_img_id, security_group_id):
         print("Error", e)
 
 
+def delete_launch_configuration(obj):
+    print("Deleting launch cfg")
+    try:
+        if len(
+            obj["client"].describe_launch_configurations(
+                LaunchConfigurationNames=[obj["name"]]
+            )["LaunchConfigurations"]
+        ):
+            response = obj["client"].delete_launch_configuration(
+                LaunchConfigurationName=obj["name"]
+            )
+            print("launch_configuration deleted")
+
+    except ClientError as e:
+        print("Error", e)
+
+
 def create_autoscaling(obj, load_balencer_name, availability_zones):
     print("\nCreating autoscaling")
     try:
@@ -421,6 +438,7 @@ def delete_autoscaling(obj):
 def main():
     # Deletion order : autoscale
     delete_autoscaling(autoscale)
+    delete_launch_configuration(autoscale)
     delete_load_balancer(elb)
 
     # ohio
