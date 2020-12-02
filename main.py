@@ -343,7 +343,7 @@ def create_load_balancer(obj, subnets, security_group_id):
             ],
         )
 
-        with open("dns.txt", "w+") as f:
+        with open("dns.txt", "w") as f:
             f.write(load_balancer["DNSName"])
 
         ok = False
