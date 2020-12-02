@@ -3,7 +3,8 @@ from botocore.exceptions import ClientError
 from time import time
 
 
-def get_timer(time_s):
+# used to stop code exec while async action is running
+def await_timer(time_s):
     t0 = time()
     t1 = time()
     while t1 - t0 <= time_s:
@@ -200,7 +201,7 @@ def delete_security_group(obj):
                     break
 
                 except ClientError as e:
-                    get_timer(10)
+                    await_timer(3)
 
                 print("Security Group Deleted %s" % (security_group_id))
 
@@ -338,7 +339,7 @@ def create_load_balancer(obj, subnets, security_group_id):
             ],
         )
 
-        with open("loadbalancer_DNS", "w+") as f:
+        with open("dns.txt", "w+") as f:
             f.write(load_balancer["DNSName"])
 
         ok = False
@@ -348,7 +349,7 @@ def create_load_balancer(obj, subnets, security_group_id):
                 if l["LoadBalancerName"] == obj["name"]:
                     ok = True
 
-            get_timer(10)
+            await_timer(3)
 
         print("load_balancer created")
 
@@ -381,7 +382,7 @@ def delete_load_balancer(obj):
                     if l["LoadBalancerName"] == obj["name"]:
                         ok = False
 
-                get_timer(10)
+                await_timer(3)
 
             print("load_balancer deleted")
 
@@ -450,7 +451,7 @@ def create_autoscaling(obj, load_balencer_name, availability_zones):
                 AutoScalingGroupNames=[obj["groupname"]]
             )["AutoScalingGroups"]
         ):
-            get_timer(10)
+            await_timer(3)
 
             print("autoscaling created")
 
@@ -475,7 +476,7 @@ def delete_autoscaling(obj):
                     AutoScalingGroupNames=[obj["groupname"]]
                 )["AutoScalingGroups"]
             ):
-                get_timer(10)
+                await_timer(3)
 
             print("autoscaling deleted")
 
@@ -484,7 +485,7 @@ def delete_autoscaling(obj):
 
 
 def main():
-    # Deletion order : autoscale
+    # Deletion reverse order of creation
     delete_autoscaling(autoscale)
     delete_launch_configuration(autoscale)
     delete_load_balancer(elb)
@@ -493,10 +494,12 @@ def main():
     delete_security_group(ohio)
     delete_security_group(oregon)
 
-    # ohio
+    """OHIO Instance Creation"""
     create_security_group(ohio)  # assign ohio's security_group id
     create_instance(ohio)  # assign ohio's instance ip and id
 
+    """OREGON SECURITY GROUP && Instance Creation"""
+    create_security_group(ohio)  # assign ohio's security_group id
     # wait for ohio's instance public ip to be assigned before assigning oregon['script']
     oregon["script"] = get_django_script(ohio["instance"]["ip"])
     create_security_group(oregon)  # assign oregon's security_group id
@@ -516,6 +519,7 @@ def main():
         for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
     ]
 
+    """AMI CREATION (USING OREGON AS MODEL)"""
     # Create AMI and delete oregon instance
     create_ami(oregon)
     delete_instance(oregon)
@@ -523,7 +527,7 @@ def main():
     # Create load balencer
     create_load_balancer(elb, subnets, oregon["security_group"]["id"])
 
-    # create autoscaling
+    """AUTOSCALING CREATION (USING OREGON AS MODEL)"""
     launch_cfg_name = "autoscalingcfg"
     create_launch_cfg(
         obj=autoscale,
