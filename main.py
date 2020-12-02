@@ -134,14 +134,15 @@ elb = {
 
 
 def get_django_script(psql_ip):
-    return """#!/bin/bash
+    return """#!/bin/sh
      sudo apt update
-     git clone https://github.com/guidiamond/tasks.git && mv tasks /home/ubuntu
-     sudo sed -i 's/node1/{}/' /home/ubuntu/tasks/portfolio/settings.py 
-     /home/ubuntu/tasks/./install.sh
-     echo $? >> /home/ubuntu/aa.txt
+     cd /home/ubuntu
+     git clone https://github.com/guidiamond/tasks
+     sudo sed -i "s/node1/{}/g" /home/ubuntu/tasks/portfolio/settings.py 
+     cd tasks
+     ./install.sh
      reboot
-    """.format(
+     """.format(
         psql_ip
     )
 
