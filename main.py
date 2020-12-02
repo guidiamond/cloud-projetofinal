@@ -2,6 +2,14 @@ import boto3
 from botocore.exceptions import ClientError
 from time import time
 
+
+def get_timer(time_s):
+    t0 = time()
+    t1 = time()
+    while t1 - t0 <= time_s:
+        t1 = time()
+
+
 postgress_script = """#!/bin/bash
          sudo apt update
          sudo apt install postgresql postgresql-contrib -y
@@ -169,6 +177,36 @@ def create_security_group(obj):
         return False
 
 
+def delete_security_group(obj):
+    print("\nDeleting security groups")
+    try:
+        security_group_id = obj["client"].describe_security_groups(
+            Filters=[
+                {
+                    "Name": "tag:%s" % (obj["security_group"]["tag"]["Key"]),
+                    "Values": [obj["security_group"]["tag"]["Value"]],
+                }
+            ]
+        )
+
+        if len(security_group_id["SecurityGroups"]):
+            security_group_id = security_group_id["SecurityGroups"][0]["GroupId"]
+            while True:
+                try:
+                    response = obj["client"].delete_security_group(
+                        GroupId=security_group_id
+                    )
+                    break
+
+                except ClientError as e:
+                    get_timer(10)
+
+                print("Security Group Deleted %s" % (security_group_id))
+
+    except ClientError as e:
+        print("Error", e)
+
+
 # Appends instance["id"] to obj
 def create_instance(obj):
     print("\nCreating instance")
@@ -250,7 +288,7 @@ def delete_image(obj):
         print("Error", e)
 
 
-def delete_instances(obj):
+def delete_instance(obj):
     print("\nDeleting Instances")
     try:
         instance_id = obj["client"].describe_instances(
@@ -277,13 +315,6 @@ def delete_instances(obj):
     except ClientError as e:
         print("Error", e)
         return False
-
-
-def get_timer(time_s):
-    t0 = time()
-    t1 = time()
-    while t1 - t0 <= time_s:
-        t1 = time()
 
 
 def create_load_balancer(obj, subnets, security_group_id):
@@ -457,6 +488,10 @@ def main():
     delete_launch_configuration(autoscale)
     delete_load_balancer(elb)
     delete_image(oregon)
+    delete_instance(oregon)
+    delete_instance(ohio)
+    delete_security_group(ohio)
+    delete_security_group(oregon)
 
     # ohio
     # create_security_group(ohio)  # assign ohio's security_group id
