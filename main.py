@@ -3,6 +3,14 @@ from botocore.exceptions import ClientError
 from time import time
 
 
+class bcolors:
+    HEADER = "\033[95m"
+    OK = "\033[92m"
+    WARNING = "\033[93m"
+    FAIL = "\033[91m"
+    ENDC = "\033[0m"
+
+
 # used to stop code exec while async action is running
 def await_timer(time_s):
     t0 = time()
@@ -150,7 +158,7 @@ def get_django_script(psql_ip):
 
 # Appends security_group_id to obj
 def create_security_group(obj):
-    print("\nCreating security group")
+    print("\n" + bcolors.HEADER + "Creating security group")
     try:
         response = obj["client"].create_security_group(
             GroupName=obj["security_group"]["name"],
@@ -166,21 +174,19 @@ def create_security_group(obj):
 
         security_group_id = response["GroupId"]
 
-        data = obj["client"].authorize_security_group_ingress(
+        obj["client"].authorize_security_group_ingress(
             GroupId=security_group_id, IpPermissions=obj["security_group"]["value"]
         )
         obj["security_group"]["id"] = security_group_id
-        print("\nSuccess")
-
-        return True
+        print("\n" + bcolors.OK + "SecurityGroup: " + security_group_id + " created")
 
     except ClientError as e:
-        print("Error", e)
-        return False
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
 
 
 def delete_security_group(obj):
-    print("\nDeleting security groups")
+    print("\n" + bcolors.WARNING + "Deleting security group")
     try:
         security_group_id = obj["client"].describe_security_groups(
             Filters=[
@@ -203,15 +209,16 @@ def delete_security_group(obj):
                 except ClientError as e:
                     await_timer(3)
 
-                print("Security Group Deleted %s" % (security_group_id))
+            print("\n" + bcolors.OK + "Security Group Deleted " + security_group_id)
 
     except ClientError as e:
-        print("Error", e)
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
 
 
 # Appends instance["id"] to obj
 def create_instance(obj):
-    print("\nCreating instance")
+    print("\n" + bcolors.HEADER + "Creating instance")
 
     try:
         waiter = obj["client"].get_waiter("instance_status_ok")
@@ -239,59 +246,26 @@ def create_instance(obj):
             "PublicIp"
         ]
         print(
-            "Instance %s created and checked, public_ip=%s"
-            % (instance[0].id, public_ip)
+            "\n"
+            + bcolors.OK
+            + "Instance id: "
+            + instance[0].id
+            + " public ip: "
+            + public_ip
+            + " created"
         )
 
         instance_id = instance[0].id
         obj["instance"]["id"] = instance_id
         obj["instance"]["ip"] = public_ip
-        return True
 
     except ClientError as e:
-        print("Error", e)
-        return False
-
-
-def create_ami(obj):
-    print("\nCreating AMI")
-    try:
-        waiter = obj["client"].get_waiter("image_available")
-        response = obj["client"].create_image(
-            InstanceId=obj["instance"]["id"], NoReboot=True, Name=obj["name"]
-        )
-        waiter.wait(ImageIds=[response["ImageId"]])
-        print("AMI created")
-
-        obj["ami"]["id"] = response["ImageId"]
-        print(response["ImageId"])
-
-        return True
-
-    except ClientError as e:
-        print("Error", e)
-
-        return False
-
-
-def delete_image(obj):
-    print("\nDeleting Images")
-    try:
-        image_id = obj["client"].describe_images(
-            Filters=[{"Name": "name", "Values": [obj["name"]]}]
-        )
-
-        if len(image_id["Images"]):
-            image_id = image_id["Images"][0]["ImageId"]
-            response = obj["client"].deregister_image(ImageId=image_id)
-            print("Image %s deleted" % (response["ResponseMetadata"]["RequestId"]))
-
-    except ClientError as e:
-        print("Error", e)
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
 
 
 def delete_instance(obj):
-    print("\nDeleting Instances")
+    print("\n" + bcolors.WARNING + "Deleting instance")
     try:
         instance_id = obj["client"].describe_instances(
             Filters=[
@@ -308,21 +282,51 @@ def delete_instance(obj):
             waiter = obj["client"].get_waiter("instance_terminated")
             response = obj["client"].terminate_instances(InstanceIds=[instance_id])
             waiter.wait(InstanceIds=[instance_id])
-            print("Instance %s Deleted" % (instance_id))
+            print("\n" + bcolors.OK + "Instance Deleted " + instance_id)
             obj["instance"]["id"] = None
-            return True
-
-        return False
 
     except ClientError as e:
-        print("Error", e)
-        return False
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
+
+
+def create_ami(obj):
+    print("\n" + bcolors.HEADER + "Creating ami")
+    try:
+        waiter = obj["client"].get_waiter("image_available")
+        response = obj["client"].create_image(
+            InstanceId=obj["instance"]["id"], NoReboot=True, Name=obj["name"]
+        )
+        waiter.wait(ImageIds=[response["ImageId"]])
+
+        obj["ami"]["id"] = response["ImageId"]
+        print("\n" + bcolors.OK + "AMI: " + response["ImageId"] + " created")
+
+    except ClientError as e:
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
+
+
+def delete_image(obj):
+    print("\n" + bcolors.WARNING + "Deleting image")
+    try:
+        image_id = obj["client"].describe_images(
+            Filters=[{"Name": "name", "Values": [obj["name"]]}]
+        )
+
+        if len(image_id["Images"]):
+            image_id = image_id["Images"][0]["ImageId"]
+            response = obj["client"].deregister_image(ImageId=image_id)
+            print("\n" + bcolors.OK + "Image Deleted " + image_id)
+
+    except ClientError as e:
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
 
 
 def create_load_balancer(obj, subnets, security_group_id):
-    print("\nCreating load_balancer")
+    print("\n" + bcolors.HEADER + "Creating load balencer")
     try:
-
         load_balancer = obj["client"].create_load_balancer(
             LoadBalancerName=obj["name"],
             Listeners=[
@@ -351,14 +355,15 @@ def create_load_balancer(obj, subnets, security_group_id):
 
             await_timer(3)
 
-        print("load_balancer created")
+        print("\n" + bcolors.OK + "load balencer " + obj["name"] + " created")
 
     except ClientError as e:
-        print("Error", e)
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
 
 
 def delete_load_balancer(obj):
-    print("\nDeleting load balencer")
+    print("\n" + bcolors.WARNING + "Deleting load balancer")
     try:
         load_balancers = obj["client"].describe_load_balancers()[
             "LoadBalancerDescriptions"
@@ -384,10 +389,11 @@ def delete_load_balancer(obj):
 
                 await_timer(3)
 
-            print("load_balancer deleted")
+            print("\n" + bcolors.OK + "Load Balencer Deleted ")
 
     except ClientError as e:
-        print("Error", e)
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
 
 
 autoscale_client = boto3.client("autoscaling", region_name=oregon_region)
@@ -399,7 +405,7 @@ autoscale = {
 
 
 def create_launch_cfg(obj, client_img_id, security_group_id):
-    print("\ncreating launch cfg")
+    print("\n" + bcolors.HEADER + "Creating launch cfg")
     try:
         response = autoscale_client.create_launch_configuration(
             LaunchConfigurationName=obj["name"],
@@ -410,14 +416,15 @@ def create_launch_cfg(obj, client_img_id, security_group_id):
             InstanceMonitoring={"Enabled": True},
         )
 
-        print("launch_configuration created")
+        print("\n" + bcolors.OK + "Launch Config Created")
 
     except ClientError as e:
-        print("Error", e)
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
 
 
-def delete_launch_configuration(obj):
-    print("Deleting launch cfg")
+def delete_launch_cfg(obj):
+    print("\n" + bcolors.WARNING + "Deleting launch cfg")
     try:
         if len(
             obj["client"].describe_launch_configurations(
@@ -427,14 +434,15 @@ def delete_launch_configuration(obj):
             response = obj["client"].delete_launch_configuration(
                 LaunchConfigurationName=obj["name"]
             )
-            print("launch_configuration deleted")
+            print("\n" + bcolors.OK + "Launch Config Deleted")
 
     except ClientError as e:
-        print("Error", e)
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
 
 
 def create_autoscaling(obj, load_balencer_name, availability_zones):
-    print("\nCreating autoscaling")
+    print("\n" + bcolors.HEADER + "Creating autoscaling")
     try:
         response = obj["client"].create_auto_scaling_group(
             AutoScalingGroupName=obj["groupname"],
@@ -453,14 +461,15 @@ def create_autoscaling(obj, load_balencer_name, availability_zones):
         ):
             await_timer(3)
 
-            print("autoscaling created")
+        print("\n" + bcolors.OK + "AutoScaling Created")
 
     except ClientError as e:
-        print("Error", e)
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
 
 
 def delete_autoscaling(obj):
-    print("\nDeleting autoscaling")
+    print("\n" + bcolors.WARNING + "Deleting autoscaling")
     try:
         if len(
             obj["client"].describe_auto_scaling_groups(
@@ -478,38 +487,34 @@ def delete_autoscaling(obj):
             ):
                 await_timer(3)
 
-            print("autoscaling deleted")
+            print("\n" + bcolors.OK + "AutoScaling Deleted")
 
     except ClientError as e:
-        print("Error", e)
+        print("\n" + bcolors.FAIL + "Error" + "\n")
+        print(e)
 
 
 def main():
     # Deletion reverse order of creation
     delete_autoscaling(autoscale)
-    delete_launch_configuration(autoscale)
+    delete_launch_cfg(autoscale)
     delete_load_balancer(elb)
     delete_image(oregon)
     delete_instance(ohio)
     delete_security_group(ohio)
     delete_security_group(oregon)
 
-    """OHIO Instance Creation"""
+    """ OHIO SECURITY GROUP && Instance Creation """
     create_security_group(ohio)  # assign ohio's security_group id
     create_instance(ohio)  # assign ohio's instance ip and id
 
-    """OREGON SECURITY GROUP && Instance Creation"""
-    create_security_group(ohio)  # assign ohio's security_group id
+    """ OREGON SECURITY GROUP && Instance Creation """
     # wait for ohio's instance public ip to be assigned before assigning oregon['script']
     oregon["script"] = get_django_script(ohio["instance"]["ip"])
     create_security_group(oregon)  # assign oregon's security_group id
     create_instance(oregon)  # assign oregon's instance ip and id
 
     # get subnets used for the load balencer
-    availability_zones = [
-        zone["ZoneName"]
-        for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
-    ]
     subnets = [
         subnet["SubnetId"] for subnet in oregon["client"].describe_subnets()["Subnets"]
     ]
@@ -519,15 +524,15 @@ def main():
         for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
     ]
 
-    """AMI CREATION (USING OREGON AS MODEL)"""
+    """ AMI CREATION (USING OREGON AS MODEL) """
     # Create AMI and delete oregon instance
     create_ami(oregon)
     delete_instance(oregon)
 
-    # Create load balencer
+    """ LOADBALENCER CREATION """
     create_load_balancer(elb, subnets, oregon["security_group"]["id"])
 
-    """AUTOSCALING CREATION (USING OREGON AS MODEL)"""
+    """ AUTOSCALING CREATION (USING OREGON AS MODEL) """
     launch_cfg_name = "autoscalingcfg"
     create_launch_cfg(
         obj=autoscale,
