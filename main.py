@@ -17,7 +17,7 @@ postgress_script = """#!/bin/bash
          sudo sed -i "/#listen_addresses/ a\listen_addresses = '*'" /etc/postgresql/10/main/postgresql.conf
          sudo sed -i "a\host all all 0.0.0.0/0 md5" /etc/postgresql/10/main/pg_hba.conf
          sudo systemctl restart postgresql
-    """
+"""
 
 ohio_region = "us-east-2"
 ohio_client = boto3.client("ec2", region_name=ohio_region)
@@ -141,7 +141,7 @@ def get_django_script(psql_ip):
      /home/ubuntu/tasks/./install.sh
      echo $? >> /home/ubuntu/aa.txt
      reboot
-""".format(
+    """.format(
         psql_ip
     )
 
@@ -488,53 +488,52 @@ def main():
     delete_launch_configuration(autoscale)
     delete_load_balancer(elb)
     delete_image(oregon)
-    delete_instance(oregon)
     delete_instance(ohio)
     delete_security_group(ohio)
     delete_security_group(oregon)
 
     # ohio
-    # create_security_group(ohio)  # assign ohio's security_group id
-    # create_instance(ohio)  # assign ohio's instance ip and id
-    #
-    # # wait for ohio's instance public ip to be assigned before assigning oregon['script']
-    # oregon["script"] = get_django_script(ohio["instance"]["ip"])
-    # create_security_group(oregon)  # assign oregon's security_group id
-    # create_instance(oregon)  # assign oregon's instance ip and id
-    #
-    # # get subnets used for the load balencer
-    # availability_zones = [
-    #     zone["ZoneName"]
-    #     for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
-    # ]
-    # subnets = [
-    #     subnet["SubnetId"] for subnet in oregon["client"].describe_subnets()["Subnets"]
-    # ]
-    # # get availability_zones for autoscaling
-    # availability_zones = [
-    #     zone["ZoneName"]
-    #     for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
-    # ]
-    #
-    # # Create AMI and delete oregon instance
-    # create_ami(oregon)
-    # delete_instances(oregon)
-    #
-    # # Create load balencer
-    # create_load_balancer(elb, subnets, oregon["security_group"]["id"])
-    #
-    # # create autoscaling
-    # launch_cfg_name = "autoscalingcfg"
-    # create_launch_cfg(
-    #     obj=autoscale,
-    #     client_img_id=oregon["ami"]["id"],
-    #     security_group_id=oregon["security_group"]["id"],
-    # )
-    # create_autoscaling(
-    #     obj=autoscale,
-    #     load_balencer_name=elb["name"],
-    #     availability_zones=availability_zones,
-    # )
+    create_security_group(ohio)  # assign ohio's security_group id
+    create_instance(ohio)  # assign ohio's instance ip and id
+
+    # wait for ohio's instance public ip to be assigned before assigning oregon['script']
+    oregon["script"] = get_django_script(ohio["instance"]["ip"])
+    create_security_group(oregon)  # assign oregon's security_group id
+    create_instance(oregon)  # assign oregon's instance ip and id
+
+    # get subnets used for the load balencer
+    availability_zones = [
+        zone["ZoneName"]
+        for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
+    ]
+    subnets = [
+        subnet["SubnetId"] for subnet in oregon["client"].describe_subnets()["Subnets"]
+    ]
+    # get availability_zones for autoscaling
+    availability_zones = [
+        zone["ZoneName"]
+        for zone in oregon["client"].describe_availability_zones()["AvailabilityZones"]
+    ]
+
+    # Create AMI and delete oregon instance
+    create_ami(oregon)
+    delete_instance(oregon)
+
+    # Create load balencer
+    create_load_balancer(elb, subnets, oregon["security_group"]["id"])
+
+    # create autoscaling
+    launch_cfg_name = "autoscalingcfg"
+    create_launch_cfg(
+        obj=autoscale,
+        client_img_id=oregon["ami"]["id"],
+        security_group_id=oregon["security_group"]["id"],
+    )
+    create_autoscaling(
+        obj=autoscale,
+        load_balencer_name=elb["name"],
+        availability_zones=availability_zones,
+    )
 
 
 main()
