@@ -234,6 +234,22 @@ def create_ami(obj):
         return False
 
 
+def delete_image(obj):
+    print("\nDeleting Images")
+    try:
+        image_id = obj["client"].describe_images(
+            Filters=[{"Name": "name", "Values": [obj["name"]]}]
+        )
+
+        if len(image_id["Images"]):
+            image_id = image_id["Images"][0]["ImageId"]
+            response = obj["client"].deregister_image(ImageId=image_id)
+            print("Image %s deleted" % (response["ResponseMetadata"]["RequestId"]))
+
+    except ClientError as e:
+        print("Error", e)
+
+
 def delete_instances(obj):
     print("\nDeleting Instances")
     try:
@@ -440,6 +456,7 @@ def main():
     delete_autoscaling(autoscale)
     delete_launch_configuration(autoscale)
     delete_load_balancer(elb)
+    delete_image(oregon)
 
     # ohio
     # create_security_group(ohio)  # assign ohio's security_group id
